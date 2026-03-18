@@ -7,17 +7,14 @@ export async function GET(request: Request) {
   const symbolsParam = searchParams.get("symbols");
 
   if (!symbolsParam) {
-    return NextResponse.json(
-      { error: "Missing symbols parameter" },
-      { status: 400 }
-    );
+    return NextResponse.json({ error: "Missing symbols" }, { status: 400 });
   }
 
   const apiKey = process.env.FINNHUB_API_KEY;
 
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Missing FINNHUB_API_KEY environment variable" },
+      { error: "Missing FINNHUB_API_KEY in Vercel environment variables" },
       { status: 500 }
     );
   }
@@ -28,18 +25,15 @@ export async function GET(request: Request) {
     .filter(Boolean);
 
   try {
-    const quoteEntries = await Promise.all(
+    const entries = await Promise.all(
       symbols.map(async (symbol) => {
-        const url = `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(
-          symbol
-        )}&token=${encodeURIComponent(apiKey)}`;
-
-        const res = await fetch(url, {
-          cache: "no-store",
-        });
+        const res = await fetch(
+          `https://finnhub.io/api/v1/quote?symbol=${encodeURIComponent(symbol)}&token=${encodeURIComponent(apiKey)}`,
+          { cache: "no-store" }
+        );
 
         if (!res.ok) {
-          throw new Error(`Quote request failed for ${symbol}`);
+          throw new Error(`Failed quote fetch for ${symbol}`);
         }
 
         const data = await res.json();
@@ -49,24 +43,28 @@ export async function GET(request: Request) {
           {
             current: Number(data.c ?? 0),
             change: Number(data.d ?? 0),
-            percent: Number(data.dp ?? 0),
+            changePercent: Number(data.dp ?? 0),
             high: Number(data.h ?? 0),
             low: Number(data.l ?? 0),
             open: Number(data.o ?? 0),
             previousClose: Number(data.pc ?? 0),
+            volume: Number(data.v ?? 0),
           },
         ];
       })
     );
 
     return NextResponse.json({
-      quotes: Object.fromEntries(quoteEntries),
+      quotes: Object.fromEntries(entries),
       updatedAt: new Date().toISOString(),
     });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Unknown quote error";
-
-    return NextResponse.json({ error: message }, { status: 500 });
+    return NextResponse.json(
+      {
+        error:
+          error instanceof Error ? error.message : "Unknown quote fetch error",
+      },
+      { status: 500 }
+    );
   }
 }
